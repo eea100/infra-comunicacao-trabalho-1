@@ -65,7 +65,7 @@ HSK|00|15|0000|OK;SR;LOTE;45;5
 
 ### 2.3 Regras de negociação
 
-O cliente **propõe** e o servidor **decide**. A janela é atribuição exclusiva do servidor: ela representa a capacidade de recepção, e apenas o receptor conhece o próprio limite. Varia de 1 a 5, com valor inicial 5.
+O cliente **propõe** e o servidor **decide**. A janela é atribuição exclusiva do servidor: ela representa a capacidade de recepção, e apenas o receptor conhece o próprio limite. O protocolo reserva para ela a faixa de 1 a 5. Neste checkpoint o servidor anuncia sempre o valor máximo, 5: não há troca de dados, e portanto nenhuma condição de recepção que justifique reduzi-lo. O ajuste dentro da faixa passa a fazer sentido no CP2, quando os pacotes `DAT` começam a circular e a janela efetivamente limita o envio.
 
 O servidor valida os parâmetros recebidos. Modo ou tipo de envio desconhecidos são substituídos pelos padrões (`GBN` e `IND`); tamanho de texto fora da faixa é ajustado ao limite mais próximo, 30 ou 400.
 
@@ -138,6 +138,7 @@ A IA foi empregada para levantar alternativas e explicar suas implicações, mas
 | Organização | Dois arquivos vs. módulos separados | Dois arquivos — menor superfície de código para dominar. |
 | Extensão do código | Versão comentada vs. enxuta | Enxuta — priorizar a leitura integral do código pelo grupo. |
 | Robustez | Manter ou remover validações | Manter — requisito definido pelo grupo. |
+| Janela no CP1 | Valor fixo vs. variação simulada | Fixo em 5 — variar sem fluxo de dados seria arbitrário. |
 
 Todo o código entregue foi revisado, testado e compreendido pelo grupo antes da submissão, conforme o compromisso de validação crítica previsto na especificação.
 
