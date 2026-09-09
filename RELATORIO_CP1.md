@@ -12,7 +12,7 @@
 - Maria Clara Albuquerque Targino
 - Guilherme Melo Caldas de Lira
 
-**Monitor:** [preencher]
+**Monitores:** Pedro e Henrique
 **Data:** 09/09/2026
 
 ---
