@@ -1,7 +1,7 @@
 import socket
 
 HOST, PORTA = "127.0.0.1", 5000
-JANELA, TEXTO_MINIMO = 5, 30
+JANELA, TEXTO_MINIMO, TEXTO_MAXIMO = 5, 30, 400
 
 
 def monta(tipo, seq, payload):
@@ -22,7 +22,7 @@ def negocia(payload):
     modo, envio, tamanho = payload.split(";")
     modo = modo if modo in ("GBN", "SR") else "GBN"
     envio = envio if envio in ("IND", "LOTE") else "IND"
-    return modo, envio, max(int(tamanho), TEXTO_MINIMO)
+    return modo, envio, min(max(int(tamanho), TEXTO_MINIMO), TEXTO_MAXIMO)
 
 
 servidor = socket.socket()
@@ -38,6 +38,10 @@ while True:
     try:
         pedido = desmonta(canal.readline().strip())
         mostra("RECEBIDO", pedido)
+        if pedido[0] != "HSK":
+            raise ValueError("esperado HSK, recebido %s" % pedido[0])
+        if pedido[2] != len(pedido[4]):
+            raise ValueError("TAM %d nao corresponde ao payload" % pedido[2])
         modo, envio, tamanho = negocia(pedido[4])
         resposta = monta("HSK", 0, "OK;%s;%s;%d;%d" % (modo, envio, tamanho, JANELA))
         canal.write(resposta + "\n")
@@ -45,7 +49,7 @@ while True:
         mostra("ENVIADO", desmonta(resposta))
         print("\nConexao estabelecida: modo=%s envio=%s texto=%d janela=%d"
               % (modo, envio, tamanho, JANELA))
-    except ValueError:
-        print("Pacote invalido, conexao descartada.")
+    except ValueError as erro:
+        print("Pacote invalido (%s), conexao descartada." % erro)
     canal.close()
     conexao.close()

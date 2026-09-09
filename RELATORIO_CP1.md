@@ -36,7 +36,7 @@ TIPO|SEQ|TAM|CRC|PAYLOAD
 | Campo | Tamanho | Descrição |
 |---|---|---|
 | TIPO | 3 caracteres | `HSK` neste checkpoint. `DAT`, `ACK` e `NAK` entram no CP2. |
-| SEQ | 2 dígitos | Número de sequência do pacote. |
+| SEQ | 2 dígitos | Número de sequência do pacote. Limita o texto a 400 caracteres (100 fragmentos de 4). |
 | TAM | variável | Quantidade de caracteres do payload. |
 | CRC | 4 caracteres | Soma de verificação. Reservado com `0000` no CP1. |
 | PAYLOAD | variável | Conteúdo. Nos pacotes `DAT` será limitado a 4 caracteres. |
@@ -54,7 +54,7 @@ HSK|00|10|0000|SR;LOTE;45
 
 - `MODO`: `GBN` (Go-Back-N) ou `SR` (Repetição Seletiva)
 - `ENVIO`: `IND` (individual) ou `LOTE`
-- `TAMANHO_MAXIMO`: inteiro, mínimo 30
+- `TAMANHO_MAXIMO`: inteiro entre 30 e 400
 
 **Resposta — servidor decide:**
 
@@ -67,11 +67,24 @@ HSK|00|15|0000|OK;SR;LOTE;45;5
 
 O cliente **propõe** e o servidor **decide**. A janela é atribuição exclusiva do servidor: ela representa a capacidade de recepção, e apenas o receptor conhece o próprio limite. Varia de 1 a 5, com valor inicial 5.
 
-O servidor valida os parâmetros recebidos. Modo ou tipo de envio desconhecidos são substituídos pelos padrões (`GBN` e `IND`); tamanho de texto inferior a 30 é elevado ao mínimo. A resposta sempre informa os valores efetivamente adotados, e o cliente exibe qualquer divergência em relação ao que pediu.
+O servidor valida os parâmetros recebidos. Modo ou tipo de envio desconhecidos são substituídos pelos padrões (`GBN` e `IND`); tamanho de texto fora da faixa é ajustado ao limite mais próximo, 30 ou 400.
+
+O limite superior decorre do campo `SEQ`: com dois dígitos e fragmentos de 4 caracteres, o espaço de numeração comporta 400 caracteres de texto. Aceitar valores maiores geraria pacotes com número de sequência fora do formato declarado no cabeçalho.
+
+A resposta sempre informa os valores efetivamente adotados. O cliente compara cada um com o que propôs e imprime uma linha de divergência para cada parâmetro alterado pelo servidor.
 
 ### 2.4 Tratamento de pacotes malformados
 
-A leitura usa `split("|", 4)`, que corta apenas nos quatro primeiros separadores — um caractere `|` presente no payload não quebra a decodificação. Pacotes fora do formato (separador ausente ou campo numérico inválido) geram `ValueError`, tratado com descarte da conexão e retorno ao estado de espera, sem interromper o servidor.
+A leitura usa `split("|", 4)`, que corta apenas nos quatro primeiros separadores — um caractere `|` presente no payload não quebra a decodificação.
+
+Após a decodificação, dois campos são conferidos antes de qualquer uso do pacote:
+
+- **TIPO** deve ser `HSK`. Sem essa checagem, um pacote de dados ou de confirmação seria interpretado como handshake — irrelevante enquanto só existe um tipo, mas incorreto a partir do CP2.
+- **TAM** deve corresponder ao comprimento real do payload. O campo é o mesmo que o CRC vai proteger no CP2, e um cabeçalho que não descreve o próprio conteúdo invalida a verificação de integridade.
+
+Pacotes fora do formato (separador ausente, campo numérico inválido, TIPO inesperado ou TAM incoerente) geram `ValueError`, tratado com descarte da conexão e retorno ao estado de espera, sem interromper o servidor. A mensagem de erro identifica a causa. As duas checagens ocorrem depois da impressão dos metadados, de modo que um pacote rejeitado ainda é exibido — o que a especificação exige e que também facilita a depuração.
+
+As mesmas validações são aplicadas pelo cliente à resposta do servidor.
 
 ### 2.5 Decisões de projeto
 
@@ -100,9 +113,9 @@ O cliente faz três perguntas; Enter aceita o padrão.
 |---|---|---|
 | Modo de confirmação | GBN / SR | GBN |
 | Modo de envio | IND / LOTE | IND |
-| Tamanho máximo do texto | número ≥ 30 | 30 |
+| Tamanho máximo do texto | número de 30 a 400 | 30 |
 
-Respostas inválidas fazem a pergunta ser repetida, sem encerrar o programa. Se o servidor não estiver ativo, o cliente informa e encerra com mensagem própria.
+Respostas inválidas exibem uma mensagem de erro e repetem a pergunta, sem encerrar o programa. Se o servidor não estiver ativo, ou se a entrada for interrompida com Ctrl+D, o cliente encerra com mensagem própria.
 
 **Execução em máquinas distintas:** alterar a constante `HOST` nos dois arquivos para o IP do servidor. Porta padrão: 5000.
 
@@ -130,13 +143,25 @@ Todo o código entregue foi revisado, testado e compreendido pelo grupo antes da
 
 ### 4.2 Análise crítica e correções
 
-**Primeira versão excessivamente extensa.** A entrega inicial da IA tinha aproximadamente 150 linhas, com comentários e camadas de validação que não eram exigidas pela especificação. O grupo avaliou que o volume comprometia o objetivo de compreender integralmente o código e solicitou uma redução ao essencial, preservando apenas o tratamento de entrada inválida. A versão final tem 111 linhas.
+**Primeira versão excessivamente extensa.** A entrega inicial da IA tinha aproximadamente 150 linhas, com comentários e camadas de validação que não eram exigidas pela especificação. O grupo avaliou que o volume comprometia o objetivo de compreender integralmente o código e solicitou uma redução ao essencial, preservando apenas o tratamento de entrada inválida. A versão enxuta ficou em 111 linhas; a revisão descrita a seguir a levou a 134.
 
 **Inconsistência entre código e documentação.** Ao enxugar o código, foi removido o pacote de tipo `ERR`, enviado quando o primeiro pacote recebido não era um handshake. O manual de utilização, escrito antes dessa redução, continuou descrevendo esse comportamento — documentando uma funcionalidade que não existia mais. A divergência foi identificada na conferência final e o manual foi corrigido para descrever o comportamento real: descarte da conexão e retorno ao estado de espera.
 
 Esse caso ilustra um risco específico do desenvolvimento assistido por IA: alterações pontuais no código não propagam automaticamente para os artefatos já produzidos. A verificação cruzada entre código e documentação passou a ser feita a cada modificação.
 
-**Ponto de atenção identificado.** A validação das respostas do usuário no cliente repete a pergunta sem exibir mensagem de erro. O comportamento é funcional, mas pouco informativo. A correção foi deliberadamente adiada para não aumentar o código nesta entrega.
+**Revisão final da entrega.** Uma última conferência linha a linha, feita com a IA a partir do repositório já montado, encontrou cinco defeitos que os testes manuais do grupo não haviam alcançado, porque todos exigiam pacotes que o próprio cliente nunca produz:
+
+| Defeito | Consequência | Correção |
+|---|---|---|
+| `TIPO` não era verificado | Um pacote `DAT` era aceito como handshake | Checagem explícita de `HSK` |
+| `TAM` não era conferido | Cabeçalho podia declarar tamanho falso | Comparação com o comprimento do payload |
+| Ausência de limite superior no tamanho | `SEQ` estouraria os 2 dígitos no CP2 | Faixa fechada de 30 a 400 |
+| Divergência não era comparada no cliente | Comportamento descrito na seção 2.3 não existia no código | Comparação campo a campo |
+| `EOFError` não tratado | Ctrl+D encerrava com rastreamento de pilha | Saída com mensagem |
+
+Os três primeiros só se manifestam contra um par malformado, situação que passa a existir no CP2, quando `DAT`, `ACK` e `NAK` entram em circulação. Foram corrigidos agora porque o custo cresce a cada checkpoint. O quarto é outra ocorrência do descompasso entre código e documentação descrito acima, desta vez na direção inversa: o relatório prometia um comportamento que o código não tinha.
+
+A verificação foi conduzida enviando pacotes malformados diretamente ao servidor por socket, fora do cliente — treze casos, entre separador ausente, campos numéricos inválidos, TIPO inesperado, TAM incoerente e valores fora de faixa. O servidor descartou todos e permaneceu disponível para a conexão seguinte.
 
 ### 4.3 Log de prompts
 
@@ -150,6 +175,7 @@ Principais temas tratados com a IA nesta etapa:
 | Conceitos de transporte confiável | Compreender os mecanismos da tabela 3.1 e os modos GBN e SR |
 | Implementação do handshake | Gerar e revisar `servidor.py` e `cliente.py` |
 | Redução do código | Identificar o que era essencial e o que era acessório |
+| Auditoria do repositório | Revisar o código publicado e testar pacotes malformados |
 
 A tabela acima constitui o anexo com os principais prompts utilizados na arquitetura, implementação e testes, conforme previsto na especificação.
 
